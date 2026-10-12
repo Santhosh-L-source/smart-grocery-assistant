@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="ta">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#0f172a">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="icons/icon-192.png">
+    <title>ஸ்மார்ட் மளிகை உதவியாளர் | Smart Grocery Assistant</title>
+    <link rel="stylesheet" href="app.css">
+</head>
+<body>
+    <!-- Top Header Bar -->
+    <header class="top-nav">
+        <div class="brand">
+            <span class="brand-icon">🛒</span>
+            <div class="brand-text">
+                <h1 id="appTitle">ஸ்மார்ட் மளிகை உதவியாளர்</h1>
+                <small id="appSubtitle">Smart Grocery Assistant</small>
+            </div>
+        </div>
+
+        <div class="nav-controls">
+            <!-- PWA Install Button -->
+            <button id="pwaInstallBtn" class="lang-btn" style="display: none; background: #059669; border-color: #10b981;" title="Install on Mobile Phone">
+                📲 <span id="pwaInstallLabel">இன்ஸ்டால் (Install)</span>
+            </button>
+
+            <!-- Language Switcher -->
+            <button id="langToggleBtn" class="lang-btn" title="Toggle Language">
+                <span id="langDisplay">English</span>
+            </button>
+
+            <!-- Role / User Profile Badge -->
+            <div id="userBadge" class="user-badge" title="Current Role">
+                <span class="user-icon">👤</span>
+                <span id="userRoleText">கடைக்காரர் (Shopkeeper)</span>
+                <button id="authSwitchBtn" class="switch-role-btn">நிர்வாகி (Admin)</button>
+            </div>
+
+            <!-- Speech Audio Indicator -->
+            <button id="repeatAudioBtn" class="audio-btn" title="Repeat Last Tamil Speech" style="display: none;">
+                🔊 <span class="audio-btn-label">திரும்பக் கேள்</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Navigation Tabs -->
+    <nav class="action-tabs">
+        <button class="tab-btn active" data-tab="sellTab" id="tabSell">
+            <span class="tab-icon">🏷️</span>
+            <span class="tab-title">விற்பனை</span>
+            <small>Sell Products</small>
+        </button>
+        <button class="tab-btn" data-tab="priceLookupTab" id="tabLookup">
+            <span class="tab-icon">🔍</span>
+            <span class="tab-title">விலை அறிதல்</span>
+            <small>Find Price</small>
+        </button>
+        <button class="tab-btn admin-only" data-tab="managePricesTab" id="tabManagePrices">
+            <span class="tab-icon">✏️</span>
+            <span class="tab-title">விலை மாற்றம்</span>
+            <small>Manage Prices</small>
+        </button>
+        <button class="tab-btn admin-only" data-tab="voicePriceTab" id="tabVoicePrice">
+            <span class="tab-icon">🎙️</span>
+            <span class="tab-title">குரல் வழி மாற்றம்</span>
+            <small>Voice Price Update</small>
+        </button>
+        <button class="tab-btn admin-only" data-tab="priceHistoryTab" id="tabPriceHistory">
+            <span class="tab-icon">📜</span>
+            <span class="tab-title">விலை வரலாறு</span>
+            <small>Price History</small>
+        </button>
+        <button class="tab-btn admin-only" data-tab="inventoryTab" id="tabInventory">
+            <span class="tab-icon">📦</span>
+            <span class="tab-title">சரக்கு இருப்பு</span>
+            <small>Inventory</small>
+        </button>
+        <button class="tab-btn" data-tab="salesHistoryTab" id="tabSalesHistory">
+            <span class="tab-icon">📋</span>
+            <span class="tab-title">விற்பனை வரலாறு</span>
+            <small>Sales History</small>
+        </button>
+    </nav>
+
+    <!-- Live Spoken Notification Bar -->
+    <div id="speechAnnouncementBanner" class="speech-banner" style="display: none;">
+        <span class="speech-pulse">🔊</span>
+        <span id="speechTextDisplay" class="speech-text"></span>
+        <button id="bannerRepeatBtn" class="banner-repeat-btn" title="Repeat speech">🔁 திரும்பக் கூறு</button>
+    </div>
+
+    <!-- Alert / Message Banner -->
+    <div id="systemNotification" class="alert-banner" style="display: none;"></div>
+
+    <main class="main-content">
+        <!-- ==================== TAB 1: SELL PRODUCTS (BILLING) ==================== -->
+        <section id="sellTab" class="tab-content active">
+            <div class="billing-container">
+                <!-- Left: Catalog & Quick Picker -->
+                <div class="catalog-section">
+                    <div class="search-bar-row">
+                        <input type="text" id="billProductSearch" class="large-input" placeholder="பொருளைத் தேடுக (Search product / Barcode)..." autocomplete="off">
+                        <button id="billBarcodeBtn" class="icon-action-btn" title="Simulate Barcode Scan">📷 பார்-கோட்</button>
+                    </div>
+
+                    <!-- Category Pills -->
+                    <div class="category-pills" id="billCategoryPills">
+                        <button class="pill active" data-category="ALL">அனைத்தும் (All)</button>
+                    </div>
+
+                    <!-- Product Grid (Large Cards for Non-literate touch) -->
+                    <div class="product-cards-grid" id="billProductGrid">
+                        <!-- Loaded dynamically -->
+                    </div>
+                </div>
+
+                <!-- Right: Active Bill & Cart -->
+                <div class="cart-section">
+                    <div class="cart-header">
+                        <h2>தற்போதைய பில் (Current Bill)</h2>
+                        <button id="clearBillBtn" class="clear-btn" title="Clear Bill">அழி (Clear)</button>
+                    </div>
+
+                    <div class="cart-items-list" id="cartItemsList">
+                        <div class="empty-cart-msg" id="emptyCartMsg">
+                            <span class="empty-icon">🛒</span>
+                            <p>பொருட்களைத் தேர்வு செய்யவும்</p>
+                            <small>No items added yet</small>
+                        </div>
+                    </div>
+
+                    <!-- Bill Summary & Big Pay Button -->
+                    <div class="cart-summary-box">
+                        <div class="summary-line">
+                            <span>பொருட்கள் (Items):</span>
+                            <strong id="cartItemCount">0</strong>
+                        </div>
+                        <div class="summary-line total-highlight">
+                            <span>மொத்த தொகை (Total):</span>
+                            <strong id="cartTotalDisplay">₹0.00</strong>
+                        </div>
+                        <div id="cartTamilTotalWords" class="tamil-words-total">பூஜ்ஜியம் ரூபாய்</div>
+
+                        <button id="completeSaleBtn" class="large-primary-btn pay-btn">
+                            <span class="btn-icon">✅</span>
+                            <span class="btn-text">பில் முடி (Complete Sale)</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ==================== TAB 2: FIND PRODUCT PRICE ==================== -->
+        <section id="priceLookupTab" class="tab-content">
+            <div class="lookup-container">
+                <div class="lookup-search-card">
+                    <h2>பொருள் விலை அறிதல் (Find Product Price)</h2>
+                    <p class="section-desc">பொருளைத் தட்டவும் அல்லது பெயர்/பார்கோடு மூலம் தேடவும். தமிழ் குரல் அறிவிப்பு கிடைக்கும்.</p>
+
+                    <div class="search-bar-row">
+                        <input type="text" id="lookupSearchInput" class="large-input" placeholder="தேடவும் (Search by Name / Barcode)...">
+                        <button id="lookupVoiceSearchBtn" class="mic-round-btn" title="Voice Search">🎤</button>
+                    </div>
+
+                    <div class="barcode-test-buttons">
+                        <span>மாதிரி பார்-கோட் (Sample Barcodes):</span>
+                        <button class="quick-chip" onclick="simulateBarcodeLookup('8901030000101')">அரிசி (Rice)</button>
+                        <button class="quick-chip" onclick="simulateBarcodeLookup('8901030000102')">சர்க்கரை (Sugar)</button>
+                        <button class="quick-chip" onclick="simulateBarcodeLookup('8901030000103')">சோப் (Soap)</button>
+                    </div>
+                </div>
+
+                <!-- Big Result Card -->
+                <div id="lookupResultCard" class="price-hero-card" style="display: none;">
+                    <div class="hero-badge" id="lookupUnitBadge">கிலோ (KG)</div>
+                    <h1 id="lookupProductNameTa" class="hero-name-ta">பொன்னி அரிசி</h1>
+                    <h3 id="lookupProductNameEn" class="hero-name-en">Rice (Ponni)</h3>
+                    <div class="hero-price" id="lookupPriceAmount">₹55.00</div>
+                    <div class="hero-tamil-words" id="lookupPriceTamilWords">ஒரு கிலோ பொன்னி அரிசி ஐம்பத்தைந்து ரூபாய்.</div>
+
+                    <div class="hero-actions">
+                        <button id="lookupSpeakBtn" class="large-primary-btn">
+                            🔊 குரல் கேள் (Hear Price)
+                        </button>
+                        <button id="lookupAddToBillBtn" class="large-secondary-btn">
+                            ➕ பில்லில் சேர் (Add to Bill)
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Quick Product Grid for Visual Lookup -->
+                <div class="visual-lookup-grid" id="lookupGrid">
+                    <!-- Loaded dynamically -->
+                </div>
+            </div>
+        </section>
+
+        <!-- ==================== TAB 3: MANAGE PRICES (ADMIN) ==================== -->
+        <section id="managePricesTab" class="tab-content">
+            <div class="manage-prices-container">
+                <div class="card-box">
+                    <h2>நிர்வாக விலை மாற்றம் (Manage Selling Prices)</h2>
+                    <p class="section-desc">பொருளைத் தேர்வு செய்து புதிய விற்பனை விலையை உள்ளிடவும். மாற்றங்கள் உடனடியாக தரவுத்தளத்தில் சேமிக்கப்படும்.</p>
+
+                    <div class="form-grid">
+                        <div class="form-group full-width">
+                            <label for="priceProductSelect">பொருள் தேர்வு (Select Product):</label>
+                            <select id="priceProductSelect" class="large-select">
+                                <option value="">-- பொருளைத் தேர்ந்தெடுக்கவும் (Choose Product) --</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label>தற்போதைய விற்பனை விலை (Current Selling Price):</label>
+                            <div id="currentPriceDisplay" class="read-only-badge">₹0.00</div>
+                        </div>
+
+                        <div class="form-group">
+                            <label>அளவீட்டு அலகு (Unit):</label>
+                            <div id="currentUnitDisplay" class="read-only-badge">-</div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="newSellingPriceInput">புதிய விற்பனை விலை (New Selling Price ₹):</label>
+                            <input type="number" id="newSellingPriceInput" class="large-input" step="0.50" min="0.01" placeholder="எ.கா. 55.00">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="newPurchasePriceInput">கொள்முதல் விலை (Purchase Price ₹ - Optional):</label>
+                            <input type="number" id="newPurchasePriceInput" class="large-input" step="0.50" min="0.00" placeholder="எ.கா. 45.00">
+                        </div>
+
+                        <div class="form-group full-width">
+                            <label for="priceChangeReason">மாற்றத்திற்கான காரணம் (Reason - Optional):</label>
+                            <input type="text" id="priceChangeReason" class="large-input" placeholder="எ.கா. சந்தை விலை உயர்வு / புதிய சரக்கு">
+                        </div>
+                    </div>
+
+                    <div class="form-actions">
+                        <button id="saveManualPriceBtn" class="large-primary-btn">
+                            💾 விலையைச் சேமி (Update Price)
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ==================== TAB 4: VOICE-BASED PRICE UPDATE (ADMIN) ==================== -->
+        <section id="voicePriceTab" class="tab-content">
+            <div class="voice-update-container">
+                <div class="voice-card">
+                    <h2>குரல் வழி விலை மாற்றம் (Voice-Based Price Update)</h2>
+                    <p class="section-desc">மைக் பட்டனை அழுத்தி கட்டளையைக் கூறவும். முன்னோட்டத்தை மதிப்பாய்வு செய்து உறுதிப்படுத்திய பின்னரே விலை புதுப்பிக்கப்படும்.</p>
+
+                    <!-- Big Microphone Centerpiece -->
+                    <div class="mic-container">
+                        <button id="voiceMicTriggerBtn" class="mega-mic-btn" title="Tap to Speak">
+                            <span class="mic-icon">🎙️</span>
+                            <span id="voiceMicStatusText" class="mic-status">பேச தட்டவும் (Tap to Speak)</span>
+                        </button>
+                        <div id="micListeningWave" class="listening-wave" style="display: none;">
+                            <span></span><span></span><span></span><span></span><span></span>
+                        </div>
+                    </div>
+
+                    <!-- Spoken Transcript Display -->
+                    <div class="transcript-box">
+                        <label>கேட்கப்பட்ட குரல் (Recognized Voice):</label>
+                        <div id="voiceTranscriptText" class="transcript-content">குரல் கட்டளைக்காக காத்திருக்கிறது... (Waiting for voice command...)</div>
+                    </div>
+
+                    <!-- Manual Speech Fallback / Simulation -->
+                    <div class="voice-fallback-box">
+                        <label>குரல் இயங்கவில்லை என்றால் தட்டச்சு செய்யவும் (Or type command):</label>
+                        <div class="inline-row">
+                            <input type="text" id="voiceCommandManualInput" class="large-input" placeholder="எ.கா. Change rice price to 55 rupees per kilogram">
+                            <button id="parseVoiceCommandManualBtn" class="large-secondary-btn">ஆய்வு செய் (Parse)</button>
+                        </div>
+                        <div class="sample-voice-chips">
+                            <span>மாதிரி கட்டளைகள் (Try sample commands):</span>
+                            <button class="quick-chip" onclick="applySampleVoice('Change rice price to 55 rupees per kilogram')">Rice to ₹55/kg</button>
+                            <button class="quick-chip" onclick="applySampleVoice('Change soap price to 35 rupees per piece')">Soap to ₹35/piece</button>
+                            <button class="quick-chip" onclick="applySampleVoice('Update sugar price to 48 rupees per kilogram')">Sugar to ₹48/kg</button>
+                            <button class="quick-chip" onclick="applySampleVoice('அரிசி விலை 55 ரூபாய் ஆக மாற்று')">தமிழ் கட்டளை (Rice)</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Voice Confirmation Review Modal Card (Mandatory before DB update) -->
+                <div id="voiceReviewCard" class="review-card" style="display: none;">
+                    <div class="review-header">
+                        <h3>⚠️ விலை மாற்ற உறுதிப்படுத்தல் (Price Update Confirmation)</h3>
+                    </div>
+                    <div class="review-body">
+                        <div class="review-item">
+                            <span>பொருள் (Product):</span>
+                            <strong id="reviewProductName">-</strong>
+                        </div>
+                        <div class="review-item">
+                            <span>அளவீடு (Unit):</span>
+                            <strong id="reviewUnit">-</strong>
+                        </div>
+                        <div class="review-comparison">
+                            <div class="price-box old-price">
+                                <span>பழைய விலை (Current)</span>
+                                <strong id="reviewOldPrice">₹0.00</strong>
+                            </div>
+                            <div class="arrow-indicator">➔</div>
+                            <div class="price-box new-price">
+                                <span>புதிய விலை (Proposed)</span>
+                                <strong id="reviewNewPrice">₹0.00</strong>
+                            </div>
+                        </div>
+                        <div class="review-tamil-prompt" id="reviewTamilPrompt">
+                            அரிசி விலை ஐம்பத்தைந்து ரூபாய் என்று மாற்றவா?
+                        </div>
+                    </div>
+                    <div class="review-actions">
+                        <button id="confirmVoiceUpdateBtn" class="large-primary-btn confirm-btn">
+                            ✅ உறுதி செய் (Confirm & Update)
+                        </button>
+                        <button id="cancelVoiceUpdateBtn" class="large-secondary-btn cancel-btn">
+                            ❌ ரத்து செய் (Cancel)
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Ambiguity Resolution Card (When multiple products match) -->
+                <div id="ambiguityCard" class="ambiguity-card" style="display: none;">
+                    <h3>ஒன்றுக்கும் மேற்பட்ட பொருட்கள் பொருந்தின (Multiple Products Matched)</h3>
+                    <p>சரியான பொருளை கீழே தட்டவும் (Please tap the intended product):</p>
+                    <div id="ambiguityCandidateGrid" class="ambiguity-grid">
+                        <!-- Loaded dynamically -->
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ==================== TAB 5: PRICE HISTORY (ADMIN) ==================== -->
+        <section id="priceHistoryTab" class="tab-content">
+            <div class="history-container">
+                <div class="card-box">
+                    <div class="section-header-row">
+                        <h2>விலை மாற்ற வரலாறு (Price Change Audit History)</h2>
+                        <button id="refreshPriceHistoryBtn" class="icon-action-btn">🔄 புதுப்பி (Refresh)</button>
+                    </div>
+                    <p class="section-desc">அனைத்து கைமுறை மற்றும் குரல் வழி விலை மாற்றங்களின் தணிக்கைப் பதிவு (Audit trail of every change).</p>
+
+                    <div class="table-responsive">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>தேதி/நேரம் (Date)</th>
+                                    <th>பொருள் (Product)</th>
+                                    <th>பழைய விலை (Old)</th>
+                                    <th>புதிய விலை (New)</th>
+                                    <th>முறை (Method)</th>
+                                    <th>நிர்வாகி (Admin)</th>
+                                    <th>காரணம் (Reason)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="priceHistoryTableBody">
+                                <!-- Loaded dynamically -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ==================== TAB 6: INVENTORY MANAGEMENT (ADMIN) ==================== -->
+        <section id="inventoryTab" class="tab-content">
+            <div class="inventory-container">
+                <div class="card-box">
+                    <div class="section-header-row">
+                        <h2>பொருட்கள் மற்றும் இருப்பு (Products & Inventory)</h2>
+                        <button id="openAddProductModalBtn" class="large-primary-btn">➕ புதிய பொருள் சேர் (Add Product)</button>
+                    </div>
+
+                    <div class="inventory-filters">
+                        <input type="text" id="inventorySearchInput" class="large-input" placeholder="பொருட்களை வடிகட்டுக (Filter products)...">
+                        <button id="filterLowStockBtn" class="pill warning-pill">⚠️ குறைந்த இருப்பு (Low Stock)</button>
+                    </div>
+
+                    <div class="table-responsive">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>பொருள் (Name)</th>
+                                    <th>பிரிவு (Category)</th>
+                                    <th>வகை (Type)</th>
+                                    <th>அலகு (Unit)</th>
+                                    <th>விற்பனை விலை (Sell Price)</th>
+                                    <th>கொள்முதல் (Cost)</th>
+                                    <th>இருப்பு (Stock)</th>
+                                    <th>நடவடிக்கை (Action)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="inventoryTableBody">
+                                <!-- Loaded dynamically -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ==================== TAB 7: SALES HISTORY ==================== -->
+        <section id="salesHistoryTab" class="tab-content">
+            <div class="sales-history-container">
+                <div class="card-box">
+                    <div class="section-header-row">
+                        <h2>முடிந்த விற்பனைகள் (Completed Sales History)</h2>
+                        <button id="refreshSalesBtn" class="icon-action-btn">🔄 புதுப்பி (Refresh)</button>
+                    </div>
+                    <p class="section-desc">கடந்த விற்பனைகளின் முழு விவரம் மற்றும் வரலாற்று விலை விபரம்.</p>
+
+                    <div class="table-responsive">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>பில் எண் (Bill #)</th>
+                                    <th>நேரம் (Date/Time)</th>
+                                    <th>பொருட்கள் (Items)</th>
+                                    <th>மொத்த தொகை (Total)</th>
+                                    <th>பணம் (Mode)</th>
+                                    <th>காசாளர் (Cashier)</th>
+                                    <th>விவரம் (Action)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="salesTableBody">
+                                <!-- Loaded dynamically -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- ==================== MODAL: ADD / EDIT PRODUCT ==================== -->
+    <div id="productModal" class="modal-backdrop" style="display: none;">
+        <div class="modal-dialog">
+            <div class="modal-header">
+                <h3 id="productModalTitle">புதிய பொருள் சேர் (Add New Product)</h3>
+                <button class="modal-close-btn" onclick="closeProductModal()">✕</button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="prodFormId">
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label for="prodFormNameTa">தமிழ் பெயர் (Tamil Name):</label>
+                        <input type="text" id="prodFormNameTa" class="large-input" placeholder="எ.கா. பொன்னி அரிசி">
+                    </div>
+                    <div class="form-group">
+                        <label for="prodFormNameEn">ஆங்கில பெயர் (English Name *):</label>
+                        <input type="text" id="prodFormNameEn" class="large-input" placeholder="e.g. Rice (Ponni)" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="prodFormBarcode">பார்-கோட் (Barcode):</label>
+                        <input type="text" id="prodFormBarcode" class="large-input" placeholder="890103...">
+                    </div>
+                    <div class="form-group">
+                        <label for="prodFormCategory">பிரிவு (Category *):</label>
+                        <input type="text" id="prodFormCategory" class="large-input" placeholder="Grains / Essentials / Snacks" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="prodFormType">வகை (Type *):</label>
+                        <select id="prodFormType" class="large-select">
+                            <option value="PACKAGED">பாக்கெட் (Packaged)</option>
+                            <option value="LOOSE">எடை/அளவு (Loose)</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="prodFormUnit">அளவீட்டு அலகு (Unit *):</label>
+                        <select id="prodFormUnit" class="large-select">
+                            <option value="KG">கிலோ (Kilogram - KG)</option>
+                            <option value="GRAM">கிராம் (Gram - g)</option>
+                            <option value="PIECE">பீஸ் (Piece)</option>
+                            <option value="PACKET">பாக்கெட் (Packet)</option>
+                            <option value="LITRE">லிட்டர் (Litre)</option>
+                            <option value="ML">மில்லி (Millilitre - ML)</option>
+                            <option value="BOTTLE">பாட்டில் (Bottle)</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="prodFormSellingPrice">விற்பனை விலை (Selling Price ₹ *):</label>
+                        <input type="number" id="prodFormSellingPrice" class="large-input" step="0.50" min="0.01" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="prodFormPurchasePrice">கொள்முதல் விலை (Purchase Price ₹):</label>
+                        <input type="number" id="prodFormPurchasePrice" class="large-input" step="0.50" min="0.00" value="0.00">
+                    </div>
+                    <div class="form-group">
+                        <label for="prodFormStock">இருப்பு அளவு (Stock Quantity):</label>
+                        <input type="number" id="prodFormStock" class="large-input" step="0.10" min="0.00" value="50.00">
+                    </div>
+                    <div class="form-group">
+                        <label for="prodFormLowStock">குறைந்த இருப்பு எச்சரிக்கை (Low Threshold):</label>
+                        <input type="number" id="prodFormLowStock" class="large-input" step="0.10" min="0.00" value="5.00">
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="large-secondary-btn" onclick="closeProductModal()">ரத்து (Cancel)</button>
+                <button id="saveProductFormBtn" class="large-primary-btn">சேமி (Save)</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== MODAL: QUANTITY KEYPAD (TACTILE DIALOG) ==================== -->
+    <div id="quantityModal" class="modal-backdrop" style="display: none;">
+        <div class="modal-dialog keypad-dialog">
+            <div class="modal-header">
+                <div>
+                    <h3 id="keypadProductNameTa">பொன்னி அரிசி</h3>
+                    <small id="keypadProductPriceInfo">₹55.00 / கிலோ</small>
+                </div>
+                <button class="modal-close-btn" onclick="closeQuantityModal()">✕</button>
+            </div>
+            <div class="modal-body keypad-body">
+                <!-- Unit Selector if Loose (kg vs g, litre vs ml) -->
+                <div id="keypadUnitSelector" class="keypad-units-row" style="display: none;">
+                    <button class="unit-toggle active" data-unit="KG">கிலோ (KG)</button>
+                    <button class="unit-toggle" data-unit="GRAM">கிராம் (Gram)</button>
+                </div>
+
+                <!-- Big Quantity Display -->
+                <div class="keypad-display">
+                    <span id="keypadQtyValue">1</span>
+                    <span id="keypadQtyUnit">கிலோ</span>
+                </div>
+
+                <div class="keypad-calc-preview">
+                    <span>தொகை (Subtotal):</span>
+                    <strong id="keypadSubtotalPreview">₹55.00</strong>
+                </div>
+
+                <!-- Quick Quantity Preset Chips for Loose items -->
+                <div id="keypadQuickChips" class="quick-preset-chips">
+                    <button class="chip" onclick="setKeypadQuantity(0.250, 'KG')">250g (1/4 kg)</button>
+                    <button class="chip" onclick="setKeypadQuantity(0.500, 'KG')">500g (1/2 kg)</button>
+                    <button class="chip" onclick="setKeypadQuantity(1.0, 'KG')">1 kg</button>
+                    <button class="chip" onclick="setKeypadQuantity(2.0, 'KG')">2 kg</button>
+                    <button class="chip" onclick="setKeypadQuantity(5.0, 'KG')">5 kg</button>
+                </div>
+
+                <!-- Tactile Numeric Keypad Grid -->
+                <div class="keypad-grid">
+                    <button class="num-key" onclick="appendKeypadDigit('1')">1</button>
+                    <button class="num-key" onclick="appendKeypadDigit('2')">2</button>
+                    <button class="num-key" onclick="appendKeypadDigit('3')">3</button>
+                    <button class="num-key" onclick="appendKeypadDigit('4')">4</button>
+                    <button class="num-key" onclick="appendKeypadDigit('5')">5</button>
+                    <button class="num-key" onclick="appendKeypadDigit('6')">6</button>
+                    <button class="num-key" onclick="appendKeypadDigit('7')">7</button>
+                    <button class="num-key" onclick="appendKeypadDigit('8')">8</button>
+                    <button class="num-key" onclick="appendKeypadDigit('9')">9</button>
+                    <button class="num-key dot-key" onclick="appendKeypadDigit('.')">.</button>
+                    <button class="num-key" onclick="appendKeypadDigit('0')">0</button>
+                    <button class="num-key clear-key" onclick="backspaceKeypad()">⌫</button>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="large-secondary-btn" onclick="closeQuantityModal()">ரத்து (Cancel)</button>
+                <button id="keypadConfirmAddBtn" class="large-primary-btn">சேர் (Add to Bill)</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== MODAL: BILL RECEIPT / SUCCESS ==================== -->
+    <div id="receiptModal" class="modal-backdrop" style="display: none;">
+        <div class="modal-dialog receipt-dialog">
+            <div class="modal-header">
+                <h3>விற்பனை முடிந்தது! (Sale Completed)</h3>
+                <button class="modal-close-btn" onclick="closeReceiptModal()">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="receipt-success-badge">✅</div>
+                <div class="receipt-bill-number" id="receiptBillNumber">BILL-20261012-ABCD</div>
+                <div class="receipt-total" id="receiptTotalAmount">₹185.00</div>
+                <div class="receipt-tamil-words" id="receiptTamilWords">மொத்த தொகை நூற்று எண்பத்தைந்து ரூபாய்.</div>
+
+                <div class="receipt-items-table-wrapper">
+                    <table class="receipt-table">
+                        <thead>
+                            <tr>
+                                <th>பொருள்</th>
+                                <th>அளவு</th>
+                                <th>விலை</th>
+                                <th>தொகை</th>
+                            </tr>
+                        </thead>
+                        <tbody id="receiptItemsTableBody">
+                            <!-- Populated dynamically -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="large-secondary-btn" id="receiptSpeakAgainBtn">🔊 மீண்டும் கேள் (Hear Total)</button>
+                <button class="large-primary-btn" onclick="closeReceiptModal()">அடுத்த பில் (Next Bill)</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Core Application Logic -->
+    <script src="app.js"></script>
+</body>
+</html>

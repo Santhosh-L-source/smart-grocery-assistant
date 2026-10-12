@@ -1,0 +1,9 @@
+target/
+*.class
+.DS_Store
+.idea/
+*.iml
+*.log
+cloudflared.exe
+backups/
+.system_generated/

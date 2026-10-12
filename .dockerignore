@@ -1,0 +1,8 @@
+target/
+.git/
+.gitignore
+backups/
+cloudflared.exe
+*.bat
+.idea/
+*.iml

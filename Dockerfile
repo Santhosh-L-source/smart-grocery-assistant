@@ -18,15 +18,17 @@ RUN mvn clean package -DskipTests
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
 
-# Add unprivileged user for security
-RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+# Add unprivileged user and create data directory
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup \
+    && mkdir -p /app/data && chown -R appuser:appgroup /app/data
 USER appuser
 
 # Copy built JAR from Stage 1
 COPY --from=build /app/target/smart-grocery-assistant-1.0.0.jar app.jar
 
-# Render passes PORT dynamically (default 8080)
+# Configuration for 24/7 Render cloud deployment
 ENV PORT=8080
+ENV SPRING_PROFILES_ACTIVE=cloud
 EXPOSE 8080
 
 ENTRYPOINT ["java", "-Djava.security.egd=file:/dev/./urandom", "-jar", "app.jar"]

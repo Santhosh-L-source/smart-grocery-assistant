@@ -4,10 +4,11 @@
  */
 
 // Application State
+const savedLanguage = (typeof localStorage !== 'undefined' && localStorage.getItem('grocery_lang')) || 'ta';
 const state = {
     currentRole: 'ADMIN', // Default to ADMIN so all tabs are visible for testing & demo
     currentUsername: 'admin',
-    language: 'ta', // 'ta' or 'en'
+    language: savedLanguage, // 'ta' or 'en'
     products: [],
     categories: [],
     cart: [], // items in active bill
@@ -60,6 +61,7 @@ class VoiceService {
     constructor() {
         this.synth = window.speechSynthesis;
         this.tamilVoice = null;
+        this.englishVoice = null;
         this.hasSpeechSupport = 'speechSynthesis' in window;
         this.initVoices();
     }
@@ -69,9 +71,14 @@ class VoiceService {
         const load = () => {
             const voices = this.synth.getVoices();
             // Look for Tamil voice (ta-IN or ta)
-            this.tamilVoice = voices.find(v => v.lang.startsWith('ta') || v.name.toLowerCase().includes('tamil')) ||
-                              voices.find(v => v.lang.startsWith('en-IN')) ||
+            this.tamilVoice = voices.find(v => v.lang.toLowerCase().startsWith('ta') || v.name.toLowerCase().includes('tamil')) ||
+                              voices.find(v => v.lang === 'en-IN') ||
                               voices[0];
+            // Look for English voice (en-IN, en-US, en-GB, en)
+            this.englishVoice = voices.find(v => v.lang === 'en-IN' || v.name.toLowerCase().includes('india')) ||
+                                voices.find(v => v.lang.toLowerCase().startsWith('en-')) ||
+                                voices.find(v => v.lang.toLowerCase().startsWith('en')) ||
+                                voices[0];
         };
         load();
         if (this.synth.onvoiceschanged !== undefined) {
@@ -79,9 +86,11 @@ class VoiceService {
         }
     }
 
-    speak(text) {
+    speak(text, forceLang = null) {
         if (!text || !text.trim()) return;
         state.lastSpokenText = text;
+
+        const langToUse = forceLang || state.language;
 
         // Display in announcement banner
         const banner = document.getElementById('speechAnnouncementBanner');
@@ -104,10 +113,17 @@ class VoiceService {
         try {
             this.synth.cancel(); // Stop any pending speech
             const utterance = new SpeechSynthesisUtterance(text);
-            if (this.tamilVoice) {
-                utterance.voice = this.tamilVoice;
+            if (langToUse === 'ta') {
+                if (this.tamilVoice) {
+                    utterance.voice = this.tamilVoice;
+                }
+                utterance.lang = (this.tamilVoice && this.tamilVoice.lang) ? this.tamilVoice.lang : 'ta-IN';
+            } else {
+                if (this.englishVoice) {
+                    utterance.voice = this.englishVoice;
+                }
+                utterance.lang = (this.englishVoice && this.englishVoice.lang) ? this.englishVoice.lang : 'en-IN';
             }
-            utterance.lang = (this.tamilVoice && this.tamilVoice.lang) ? this.tamilVoice.lang : 'ta-IN';
             utterance.rate = 0.95;
             utterance.pitch = 1.0;
             this.synth.speak(utterance);
@@ -358,22 +374,25 @@ function renderBillProductGrid(products) {
     if (!grid) return;
     grid.innerHTML = '';
 
+    const isEn = (state.language === 'en');
     if (products.length === 0) {
-        grid.innerHTML = `<div style="grid-column: 1/-1; text-align: center; padding: 20px; color: #94a3b8;">பொருட்கள் எதுவும் இல்லை (No products found)</div>`;
+        grid.innerHTML = `<div style="grid-column: 1/-1; text-align: center; padding: 20px; color: #94a3b8;">${isEn ? 'No products found' : 'பொருட்கள் எதுவும் இல்லை (No products found)'}</div>`;
         return;
     }
 
     products.forEach(p => {
         const card = document.createElement('div');
         card.className = 'product-card';
+        const primaryTitle = isEn ? (p.nameEn || p.nameTa) : (p.nameTa || p.nameEn);
+        const secondaryTitle = isEn ? (p.nameTa || '') : p.nameEn;
         card.innerHTML = `
             <div>
                 <div class="card-top">
                     <span class="card-unit-badge">${p.unit}</span>
                     <span style="font-size: 0.75rem; color: #94a3b8;">#${p.id}</span>
                 </div>
-                <div class="card-title-ta">${p.nameTa || p.nameEn}</div>
-                <div class="card-title-en">${p.nameEn}</div>
+                <div class="card-title-ta">${primaryTitle}</div>
+                <div class="card-title-en">${secondaryTitle}</div>
             </div>
             <div class="card-price-row">
                 <span class="card-price-value">₹${p.sellingPrice.toFixed(2)}</span>
@@ -507,7 +526,10 @@ document.getElementById('keypadConfirmAddBtn')?.addEventListener('click', () => 
     renderCart();
 
     // Spoken feedback for the added product
-    const itemAnnouncement = `${p.nameTa || p.nameEn} பில்லில் சேர்க்கப்பட்டது.`;
+    const isEn = (state.language === 'en');
+    const itemAnnouncement = isEn
+        ? `${p.nameEn || p.nameTa} added to bill.`
+        : `${p.nameTa || p.nameEn} பில்லில் சேர்க்கப்பட்டது.`;
     voiceService.speak(itemAnnouncement);
 });
 
@@ -517,13 +539,14 @@ function renderCart() {
     const countDisplay = document.getElementById('cartItemCount');
     const totalDisplay = document.getElementById('cartTotalDisplay');
     const tamilTotalWords = document.getElementById('cartTamilTotalWords');
+    const isEn = (state.language === 'en');
 
     if (state.cart.length === 0) {
         list.innerHTML = '';
         list.appendChild(emptyMsg);
         countDisplay.textContent = '0';
         totalDisplay.textContent = '₹0.00';
-        tamilTotalWords.textContent = 'பூஜ்ஜியம் ரூபாய்';
+        tamilTotalWords.textContent = isEn ? 'Zero Rupees' : 'பூஜ்ஜியம் ரூபாய்';
         return;
     }
 
@@ -534,9 +557,10 @@ function renderCart() {
         total += item.subtotal;
         const row = document.createElement('div');
         row.className = 'cart-row';
+        const itemTitle = isEn ? (item.product.nameEn || item.product.nameTa) : (item.product.nameTa || item.product.nameEn);
         row.innerHTML = `
             <div class="cart-item-info">
-                <h4>${item.product.nameTa || item.product.nameEn}</h4>
+                <h4>${itemTitle}</h4>
                 <small>${item.quantity} ${item.unit} × ₹${item.clientPriceSnapshot.toFixed(2)}</small>
             </div>
             <div class="cart-item-actions">
@@ -550,8 +574,8 @@ function renderCart() {
     countDisplay.textContent = state.cart.length;
     totalDisplay.textContent = `₹${total.toFixed(2)}`;
 
-    // Calculate running Tamil words
-    tamilTotalWords.textContent = formatRupeesInTamil(total);
+    // Calculate running words in active language
+    tamilTotalWords.textContent = isEn ? formatRupeesInEnglish(total) : formatRupeesInTamil(total);
 }
 
 function removeFromCart(index) {
@@ -591,14 +615,19 @@ document.getElementById('completeSaleBtn')?.addEventListener('click', async () =
         // Show receipt dialog
         document.getElementById('receiptBillNumber').textContent = result.saleNumber;
         document.getElementById('receiptTotalAmount').textContent = `₹${result.totalAmount.toFixed(2)}`;
-        document.getElementById('receiptTamilWords').textContent = result.spokenTamilTotal;
+        const isEn = (state.language === 'en');
+        const billSpoken = isEn
+            ? `Total bill amount is ${result.totalAmount.toFixed(0)} rupees.`
+            : (result.spokenTamilTotal || `மொத்த தொகை ${result.totalAmount.toFixed(0)} ரூபாய்.`);
+        document.getElementById('receiptTamilWords').textContent = billSpoken;
 
         const itemsBody = document.getElementById('receiptItemsTableBody');
         itemsBody.innerHTML = '';
         result.items.forEach(it => {
             const tr = document.createElement('tr');
+            const itemName = isEn ? (it.productNameEn || it.productNameTa) : (it.productNameTa || it.productNameEn);
             tr.innerHTML = `
-                <td><strong>${it.productNameTa || it.productNameEn}</strong></td>
+                <td><strong>${itemName}</strong></td>
                 <td>${it.quantity} ${it.unitCode}</td>
                 <td>₹${it.unitPriceSnapshot.toFixed(2)}</td>
                 <td><strong>₹${it.subtotal.toFixed(2)}</strong></td>
@@ -608,8 +637,8 @@ document.getElementById('completeSaleBtn')?.addEventListener('click', async () =
 
         document.getElementById('receiptModal').style.display = 'flex';
 
-        // Speak the final bill total in Tamil!
-        voiceService.speak(result.spokenTamilTotal);
+        // Speak the final bill total in active language!
+        voiceService.speak(billSpoken);
 
         // Reset cart
         state.cart = [];
@@ -666,17 +695,20 @@ function renderVisualLookupGrid(products) {
     const grid = document.getElementById('lookupGrid');
     if (!grid) return;
     grid.innerHTML = '';
+    const isEn = (state.language === 'en');
     products.forEach(p => {
         const card = document.createElement('div');
         card.className = 'product-card';
+        const primaryTitle = isEn ? (p.nameEn || p.nameTa) : (p.nameTa || p.nameEn);
+        const secondaryTitle = isEn ? (p.nameTa || '') : p.nameEn;
         card.innerHTML = `
             <div>
                 <div class="card-top">
                     <span class="card-unit-badge">${p.unit}</span>
                     <span style="font-size: 1.2rem;">🔊</span>
                 </div>
-                <div class="card-title-ta">${p.nameTa || p.nameEn}</div>
-                <div class="card-title-en">${p.nameEn}</div>
+                <div class="card-title-ta">${primaryTitle}</div>
+                <div class="card-title-en">${secondaryTitle}</div>
             </div>
             <div class="card-price-row">
                 <span class="card-price-value">₹${p.sellingPrice.toFixed(2)}</span>
@@ -691,18 +723,24 @@ function showPriceHero(product) {
     const card = document.getElementById('lookupResultCard');
     if (!card) return;
 
+    const isEn = (state.language === 'en');
     card.style.display = 'block';
     document.getElementById('lookupUnitBadge').textContent = product.unit;
-    document.getElementById('lookupProductNameTa').textContent = product.nameTa || product.nameEn;
-    document.getElementById('lookupProductNameEn').textContent = product.nameEn;
+    document.getElementById('lookupProductNameTa').textContent = isEn ? (product.nameEn || product.nameTa) : (product.nameTa || product.nameEn);
+    document.getElementById('lookupProductNameEn').textContent = isEn ? (product.nameTa || '') : product.nameEn;
     document.getElementById('lookupPriceAmount').textContent = `₹${product.sellingPrice.toFixed(2)}`;
-    document.getElementById('lookupPriceTamilWords').textContent = product.spokenTamilPrice;
 
-    // Automatically speak the price in Tamil!
-    voiceService.speak(product.spokenTamilPrice);
+    const spokenText = isEn
+        ? `${product.nameEn || product.nameTa}, price is ${product.sellingPrice.toFixed(0)} rupees per ${product.unit}.`
+        : (product.spokenTamilPrice || `${product.nameTa} ஒரு ${product.unit} ${product.sellingPrice.toFixed(0)} ரூபாய்.`);
+
+    document.getElementById('lookupPriceTamilWords').textContent = spokenText;
+
+    // Automatically speak the price in active language!
+    voiceService.speak(spokenText);
 
     document.getElementById('lookupSpeakBtn').onclick = () => {
-        voiceService.speak(product.spokenTamilPrice);
+        voiceService.speak(spokenText);
     };
 
     document.getElementById('lookupAddToBillBtn').onclick = () => {
@@ -1197,14 +1235,147 @@ document.getElementById('bannerRepeatBtn')?.addEventListener('click', () => voic
 // Language Toggle
 document.getElementById('langToggleBtn')?.addEventListener('click', () => {
     state.language = (state.language === 'ta') ? 'en' : 'ta';
-    document.getElementById('langDisplay').textContent = (state.language === 'ta') ? 'English' : 'தமிழ்';
+    try {
+        localStorage.setItem('grocery_lang', state.language);
+    } catch (e) {}
     applyLanguageTranslations();
+    const switchMsg = (state.language === 'en') ? "Language changed to English" : "மொழி தமிழுக்கு மாற்றப்பட்டது";
+    showAlert(switchMsg, "info");
 });
 
 function applyLanguageTranslations() {
-    const t = i18n[state.language];
-    document.getElementById('appTitle').textContent = t.appTitle;
-    document.getElementById('appSubtitle').textContent = t.appSubtitle;
+    const isEn = (state.language === 'en');
+
+    // Language Toggle button indicator
+    const langDisplay = document.getElementById('langDisplay');
+    if (langDisplay) {
+        langDisplay.innerHTML = isEn ? '🌐 <strong>English</strong> | தமிழ்' : '🌐 <strong>தமிழ்</strong> | English';
+    }
+
+    // Header
+    const appTitle = document.getElementById('appTitle');
+    if (appTitle) appTitle.textContent = isEn ? "Smart Grocery Assistant" : "ஸ்மார்ட் மளிகை உதவியாளர்";
+
+    const appSubtitle = document.getElementById('appSubtitle');
+    if (appSubtitle) appSubtitle.textContent = isEn ? "Smart Grocery Shop Management" : "Smart Grocery Assistant";
+
+    const pwaInstallLabel = document.getElementById('pwaInstallLabel');
+    if (pwaInstallLabel) pwaInstallLabel.textContent = isEn ? "Install App" : "இன்ஸ்டால் (Install)";
+
+    const repeatAudioLabel = document.querySelector('#repeatAudioBtn .audio-btn-label');
+    if (repeatAudioLabel) repeatAudioLabel.textContent = isEn ? "Repeat Audio" : "திரும்பக் கேள்";
+
+    const bannerRepeatBtn = document.getElementById('bannerRepeatBtn');
+    if (bannerRepeatBtn) bannerRepeatBtn.textContent = isEn ? "🔁 Repeat Voice" : "🔁 திரும்பக் கூறு";
+
+    // Role text
+    const userRoleText = document.getElementById('userRoleText');
+    if (userRoleText) {
+        if (state.currentRole === 'ADMIN') {
+            userRoleText.textContent = isEn ? "Administrator" : "நிர்வாகி (Admin)";
+        } else {
+            userRoleText.textContent = isEn ? "Shopkeeper" : "கடைக்காரர் (Shopkeeper)";
+        }
+    }
+
+    // Navigation Tabs
+    const setTab = (id, primaryTa, secondaryEn) => {
+        const btn = document.getElementById(id);
+        if (!btn) return;
+        const titleEl = btn.querySelector('.tab-title');
+        const smallEl = btn.querySelector('small');
+        if (titleEl) titleEl.textContent = isEn ? secondaryEn : primaryTa;
+        if (smallEl) smallEl.textContent = isEn ? primaryTa : secondaryEn;
+    };
+
+    setTab('tabSell', "விற்பனை", "Sell Products");
+    setTab('tabLookup', "விலை அறிதல்", "Find Price");
+    setTab('tabManagePrices', "விலை மாற்றம்", "Manage Prices");
+    setTab('tabVoicePrice', "குரல் வழி மாற்றம்", "Voice Price Update");
+    setTab('tabPriceHistory', "விலை வரலாறு", "Price History");
+    setTab('tabInventory', "சரக்கு இருப்பு", "Inventory");
+    setTab('tabSalesHistory', "விற்பனை வரலாறு", "Sales History");
+
+    // Sell Tab
+    const billSearch = document.getElementById('billProductSearch');
+    if (billSearch) billSearch.placeholder = isEn ? "Search product / Barcode..." : "பொருளைத் தேடுக (Search product / Barcode)...";
+
+    const barcodeBtn = document.getElementById('billBarcodeBtn');
+    if (barcodeBtn) barcodeBtn.innerHTML = isEn ? "📷 Barcode" : "📷 பார்-கோட்";
+
+    const cartHeading = document.querySelector('.cart-header h2');
+    if (cartHeading) cartHeading.textContent = isEn ? "Current Bill" : "தற்போதைய பில் (Current Bill)";
+
+    const clearBtn = document.getElementById('clearBillBtn');
+    if (clearBtn) clearBtn.textContent = isEn ? "Clear" : "அழி (Clear)";
+
+    const emptyMsgP = document.querySelector('#emptyCartMsg p');
+    if (emptyMsgP) emptyMsgP.textContent = isEn ? "Select items from catalog" : "பொருட்களைத் தேர்வு செய்யவும்";
+
+    const emptyMsgSmall = document.querySelector('#emptyCartMsg small');
+    if (emptyMsgSmall) emptyMsgSmall.textContent = isEn ? "Click any card to add" : "No items added yet";
+
+    const completeSaleBtnText = document.querySelector('#completeSaleBtn .btn-text');
+    if (completeSaleBtnText) completeSaleBtnText.textContent = isEn ? "Complete Sale" : "பில் முடி (Complete Sale)";
+
+    // Price Lookup Tab
+    const lookupTitle = document.querySelector('.lookup-search-card h2');
+    if (lookupTitle) lookupTitle.textContent = isEn ? "Find Product Price" : "பொருள் விலை அறிதல் (Find Product Price)";
+
+    const lookupDesc = document.querySelector('.lookup-search-card .section-desc');
+    if (lookupDesc) {
+        lookupDesc.textContent = isEn 
+            ? "Tap an item or search by name / barcode. English & Tamil voice announcements supported."
+            : "பொருளைத் தட்டவும் அல்லது பெயர்/பார்கோடு மூலம் தேடவும். தமிழ் குரல் அறிவிப்பு கிடைக்கும்.";
+    }
+
+    const lookupInput = document.getElementById('lookupSearchInput');
+    if (lookupInput) lookupInput.placeholder = isEn ? "Search by Name / Barcode..." : "தேடவும் (Search by Name / Barcode)...";
+
+    const lookupSpeakBtn = document.getElementById('lookupSpeakBtn');
+    if (lookupSpeakBtn) lookupSpeakBtn.textContent = isEn ? "🔊 Hear Price" : "🔊 குரல் கேள் (Hear Price)";
+
+    const lookupAddBtn = document.getElementById('lookupAddToBillBtn');
+    if (lookupAddBtn) lookupAddBtn.textContent = isEn ? "➕ Add to Bill" : "➕ பில்லில் சேர் (Add to Bill)";
+
+    // Manage Prices Tab
+    const manageTitle = document.querySelector('#managePricesTab .card-box h2');
+    if (manageTitle) manageTitle.textContent = isEn ? "Manage Selling Prices" : "நிர்வாக விலை மாற்றம் (Manage Selling Prices)";
+
+    const saveManualBtn = document.getElementById('saveManualPriceBtn');
+    if (saveManualBtn) saveManualBtn.textContent = isEn ? "💾 Update Price" : "💾 விலையைச் சேமி (Update Price)";
+
+    // Voice Update Tab
+    const voiceTitle = document.querySelector('.voice-card h2');
+    if (voiceTitle) voiceTitle.textContent = isEn ? "Voice-Based Price Update" : "குரல் வழி விலை மாற்றம் (Voice-Based Price Update)";
+
+    const voiceStatus = document.getElementById('voiceMicStatusText');
+    if (voiceStatus && !speechService?.isListening) {
+        voiceStatus.textContent = isEn ? "Tap to Speak" : "பேச தட்டவும் (Tap to Speak)";
+    }
+
+    const parseBtn = document.getElementById('parseVoiceCommandManualBtn');
+    if (parseBtn) parseBtn.textContent = isEn ? "Parse" : "ஆய்வு செய் (Parse)";
+
+    const confirmVoiceBtn = document.getElementById('confirmVoiceUpdateBtn');
+    if (confirmVoiceBtn) confirmVoiceBtn.textContent = isEn ? "✅ Confirm & Update" : "✅ உறுதி செய் (Confirm & Update)";
+
+    const cancelVoiceBtn = document.getElementById('cancelVoiceUpdateBtn');
+    if (cancelVoiceBtn) cancelVoiceBtn.textContent = isEn ? "❌ Cancel" : "❌ ரத்து செய் (Cancel)";
+
+    // Keypad Modal Buttons
+    const addKeypadBtn = document.getElementById('addKeypadItemBtn');
+    if (addKeypadBtn) addKeypadBtn.textContent = isEn ? "Add to Bill" : "பில்லில் சேர் (Add to Bill)";
+
+    const closeKeypadBtn = document.getElementById('closeKeypadBtn');
+    if (closeKeypadBtn) closeKeypadBtn.textContent = isEn ? "Cancel" : "ரத்து (Cancel)";
+
+    // Re-render grids and cart to reflect language choice
+    if (state.products && state.products.length > 0) {
+        renderBillProductGrid(state.products);
+        renderVisualLookupGrid(state.products);
+    }
+    renderCart();
 }
 
 function showAlert(message, type = 'info') {
@@ -1223,6 +1394,41 @@ function formatRupeesInTamil(amount) {
     if (!amount || amount === 0) return "பூஜ்ஜியம் ரூபாய்";
     const rounded = Math.round(amount);
     return `சுமார் ${rounded} ரூபாய்`;
+}
+
+// Format integer/decimal rupees to English words for UI display
+function formatRupeesInEnglish(amount) {
+    if (!amount || amount === 0) return "Zero Rupees";
+    const rounded = Math.round(amount);
+    const ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine',
+        'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
+    const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+
+    function convertBelowThousand(n) {
+        if (n === 0) return '';
+        if (n < 20) return ones[n];
+        if (n < 100) return tens[Math.floor(n / 10)] + (n % 10 !== 0 ? ' ' + ones[n % 10] : '');
+        return ones[Math.floor(n / 100)] + ' Hundred' + (n % 100 !== 0 ? ' ' + convertBelowThousand(n % 100) : '');
+    }
+
+    let result = '';
+    let n = rounded;
+    if (n >= 10000000) {
+        result += convertBelowThousand(Math.floor(n / 10000000)) + ' Crore ';
+        n %= 10000000;
+    }
+    if (n >= 100000) {
+        result += convertBelowThousand(Math.floor(n / 100000)) + ' Lakh ';
+        n %= 100000;
+    }
+    if (n >= 1000) {
+        result += convertBelowThousand(Math.floor(n / 1000)) + ' Thousand ';
+        n %= 1000;
+    }
+    if (n > 0) {
+        result += convertBelowThousand(n);
+    }
+    return (result.trim() || 'Zero') + ' Rupees';
 }
 
 // PWA Service Worker Registration & Mobile Install Prompt
@@ -1247,7 +1453,7 @@ window.addEventListener('beforeinstallprompt', (e) => {
                 deferredInstallPrompt.prompt();
                 const choice = await deferredInstallPrompt.userChoice;
                 if (choice.outcome === 'accepted') {
-                    showAlert("செயலி உங்கள் போனில் நிறுவப்பட்டது! (App installed!)", "success");
+                    showAlert(state.language === 'en' ? "App installed on your device!" : "செயலி உங்கள் போனில் நிறுவப்பட்டது! (App installed!)", "success");
                 }
                 deferredInstallPrompt = null;
                 installBtn.style.display = 'none';
@@ -1258,6 +1464,8 @@ window.addEventListener('beforeinstallprompt', (e) => {
 
 // Initial bootstrap
 window.addEventListener('DOMContentLoaded', () => {
+    applyLanguageTranslations();
     loadProducts();
 });
+
 

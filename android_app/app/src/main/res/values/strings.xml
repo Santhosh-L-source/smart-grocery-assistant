@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">ஸ்மார்ட் மளிகை</string>
+    <string name="error_loading">இணைக்க முடியவில்லை (Connection Error)</string>
+    <string name="error_desc">சர்வரை தொடர்பு கொள்ள முடியவில்லை. உங்கள் இணைய இணைப்பை சரிபார்க்கவும்.</string>
+    <string name="retry_btn">மீண்டும் முயற்சி செய்க (Retry)</string>
+    <string name="waking_server">சர்வர் தயாராகிறது… காத்திருக்கவும் (Connecting to server…)</string>
+</resources>

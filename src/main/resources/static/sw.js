@@ -1,5 +1,5 @@
 // Smart Grocery Assistant - Service Worker for PWA
-const CACHE_NAME = 'smart-grocery-v1';
+const CACHE_NAME = 'smart-grocery-v2';
 const STATIC_ASSETS = [
     '/',
     '/index.html',
